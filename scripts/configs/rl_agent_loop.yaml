@@ -1,0 +1,3 @@
+# Agent loops verl can instantiate by name (actor_rollout_ref.rollout.agent.agent_loop_config_path).
+- name: imagine_route
+  _target_: avtr.rl.agent_loop.ImagineRouteAgentLoop

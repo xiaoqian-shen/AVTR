@@ -1,0 +1,13 @@
+include: _default_template_yaml
+task: mvbench_moving_attribute
+dataset_name: moving_attribute
+test_split: train
+lmms_eval_specific_kwargs:
+  default:
+    sub_task: moving_attribute
+    post_prompt: "Only give the best option.\n"
+  # The instruction the evaluated checkpoints were trained on.
+  qwen3_5_vllm: &qwen3_5
+    sub_task: moving_attribute
+    post_prompt: "Only give the best option. Answer with the option's letter from the given choices directly. Output only a single letter (e.g. A).\n"
+  qwen3_5_imagine_vllm: *qwen3_5

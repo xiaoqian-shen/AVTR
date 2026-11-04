@@ -1,0 +1,28 @@
+# HF repo craigwu/vstar_bench: test_questions.jsonl loads as a one-file 'train' split;
+# utils.vstar_doc_to_visual fetches each row's image file from the same repo.
+dataset_path: craigwu/vstar_bench
+dataset_kwargs:
+  data_files: test_questions.jsonl
+task: vstar
+test_split: train
+output_type: generate_until
+doc_to_visual: !function utils.vstar_doc_to_visual
+doc_to_text: !function utils.vstar_doc_to_text
+doc_to_target: !function utils.vstar_doc_to_target
+process_results: !function utils.vstar_process_results
+generation_kwargs:
+  max_new_tokens: 1024
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
+metric_list:
+  - metric: accuracy
+    aggregation: !function utils.vstar_aggregate_accuracy
+    higher_is_better: true
+# Imagine reasons with abstract visual tokens then boxes the answer, so the post-prompt is the SAME
+# \boxed instruction used in training (train/eval consistency). process_results reads the box back.
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    post_prompt: "Answer the multiple-choice question. Put your final answer (the option letter) within \\boxed{}."

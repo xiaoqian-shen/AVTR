@@ -1,0 +1,30 @@
+# The official BLINK val split: the per-sub-task val parquets of BLINK-Benchmark/BLINK at a pinned
+# revision, read with their own columns (idx, prompt, answer, sub_task, image_1..image_4); see utils.py.
+dataset_path: BLINK-Benchmark/BLINK
+dataset_kwargs:
+  revision: a3666eb249237ba3d5eca8db21176cc47967e040
+  data_files:
+    validation: "*/val-*.parquet"
+task: blink
+# BLINK's `test` split has no public answers, so we evaluate the `val` split.
+test_split: validation
+output_type: generate_until
+doc_to_visual: !function utils.blink_doc_to_visual
+doc_to_text: !function utils.blink_doc_to_text
+doc_to_target: !function utils.blink_doc_to_target
+process_docs: !function utils.blink_process_docs
+process_results: !function utils.blink_process_results
+generation_kwargs:
+  max_new_tokens: 128
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
+metric_list:
+  - metric: accuracy
+    aggregation: !function utils.blink_aggregate_accuracy
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    post_prompt: "Answer with the option's letter from the given choices directly. Output only a single letter (e.g. A)."

@@ -1,0 +1,82 @@
+# Stage 1: question-conditioned visual reflection, initialized from stage 0.
+# Train queries, connector, and SANA on rows with visual targets; freeze the backbone.
+seed: 42
+
+model:
+  backbone: ${BACKBONE:-Qwen/Qwen3.5-9B}
+  init_from: ${INIT_FROM}         # required: stage-0 checkpoint (queries, connector, SANA)
+  sana: ${SANA:-}                 # empty: the SANA pipeline inside init_from
+  attn_implementation: flash_attention_2
+  num_queries: 64                 # num_queries / connector_layers / resolution must match init_from
+  connector_layers: 6
+  layer_agg: last
+  resolution: 512
+  edit_cond: true                 # SANA also reads a source-image latent (black when absent)
+  edit_source_dropout: 0.1
+  markers: false
+  fp32_latent_query: false        # queries + connector cast to bf16 before the FSDP wrap
+  ce_loss_weight: 0.0
+  gen_loss_weight: 1.0
+
+trainable:
+  latent_queries: 1.0e-6
+  connector: 1.0e-6
+  decoder: 1.0e-5
+
+data:
+  kind: imagine
+  seed: 819
+  target_only: true
+  think_opener: true              # masked prompt ends at "<think>\n"
+  target_min_std: 15              # below it: a black title card
+  target_min_sharp: 0.15          # below it: a blank slide or motion blur
+  joyai_train_sidecar: ${DATA_ROOT:-/data/avtr}/datasets/salient/joyai_full_v3/joyai_train_sidecar_v3.json
+  joyai_neg_keep_prob: 0.4
+  joyai_neg_min_images: 1
+  joyai_answer_box_thickness: 3
+  joyai_mv_base_right_keep_prob: 0.2826
+  region_sidecar: ""
+  clue_sidecar: ""
+  image_max_pixels: 4194304
+  image_min_pixels: 16384
+  video_max_pixels: 159744
+  video_min_pixels: 16384
+  video_fps: 2
+  video_max_frames: 256
+  # Weights are rows drawn per epoch. An empty dir drops the source. Order seeds each source's stream.
+  sources:
+    - {name: joyai, adapter: joyai, dir: "${DATA_ROOT:-/data/avtr}/datasets/JoyAI-Image-OpenSpatial", subdirs: [MC, SR], weight: 318124}  # includes neg_keep_prob of the negative rows
+    - {name: joyai_neg, adapter: joyai, dir: "", subdirs: [SAR], weight: 147234}
+    - {name: open_o3, adapter: open_o3, dir: "${DATA_ROOT:-/data/avtr}/datasets/Open-o3-Video-data-parquet", weight: 31166}
+    - {name: vsi590k, adapter: open_o3, dir: "", weight: 22912}
+    - {name: spatial_ttt_97k, adapter: open_o3, dir: "", weight: 17689}
+    - {name: activitynet, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/ActivityNet-Captions-parquet", weight: 27599}
+    - {name: g_videoqa, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/G-VideoQA-parquet", weight: 22526}
+    - {name: grounding_cot, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/Grounding-CoT-parquet", weight: 34234}
+    - {name: videochat3_lv, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/VideoChat3-LV116k-parquet", weight: 44933}
+    - {name: visualcot, adapter: open_o3, dir: "${DATA_ROOT:-/data/avtr}/datasets/Visual-CoT-bbox-parquet", weight: 80000}
+    - {name: spatialedit, adapter: spatialedit, dir: "${DATA_ROOT:-/data/avtr}/datasets/SpatialEdit-500K", subdirs: [camera_control, object_moving, object_rotation], weight: 100000}
+
+viz_every: 500
+viz_steps: 20
+output_mirror: ${OUTPUT_MIRROR:-}      # optional fsspec dir each checkpoint is copied to
+resume_from: ${RESUME_FROM:-}          # default: newest checkpoint-N in train.output_dir
+
+train:
+  output_dir: ${OUTPUT_DIR:-runs/stage1}
+  max_steps: 10000
+  per_device_train_batch_size: 1
+  lr_scheduler_type: cosine
+  warmup_steps: 0.03              # below one: a fraction of max_steps (warmup_ratio is deprecated)
+  weight_decay: 0.1
+  max_grad_norm: 5.0
+  optim: adamw_torch
+  bf16: true
+  tf32: true
+  fsdp: full_shard auto_wrap
+  gradient_checkpointing: true
+  logging_steps: 1
+  save_steps: 1000
+  save_total_limit: 2
+  dataloader_num_workers: 8
+  report_to: tensorboard

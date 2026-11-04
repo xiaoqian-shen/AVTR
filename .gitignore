@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+/build/
+/dist/
+
+# Local data and experiment outputs
+/data/
+/runs/
+/outputs/
+/eval_results/
+/tensorboard_log/

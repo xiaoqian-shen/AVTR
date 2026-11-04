@@ -1,0 +1,41 @@
+# The ORIGINAL ActivityNet-Captions grounding split (val_2); the
+# videos come from val2_videos.zip, extracted to $HF_HOME/activitynet_tvg/val2_videos.
+dataset_path: sming256/ActivityNetTVG
+dataset_kwargs:
+  cache_dir: activitynet_tvg
+  video: True
+  video_subdir: val2_videos
+task: activitynet_tvg
+test_split: test
+output_type: generate_until
+doc_to_visual: !function activitynet_tvg_utils.tvg_doc_to_visual
+doc_to_text: !function activitynet_tvg_utils.tvg_doc_to_text
+doc_to_target: !function activitynet_tvg_utils.tvg_doc_to_target
+process_results: !function activitynet_tvg_utils.tvg_process_results
+generation_kwargs:
+  max_new_tokens: 256
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
+metric_list:
+  - metric: iou_0.3
+    aggregation: !function activitynet_tvg_utils.tvg_aggregate_iou_03
+    higher_is_better: true
+  - metric: iou_0.5
+    aggregation: !function activitynet_tvg_utils.tvg_aggregate_iou_05
+    higher_is_better: true
+  - metric: iou_0.7
+    aggregation: !function activitynet_tvg_utils.tvg_aggregate_iou_07
+    higher_is_better: true
+  - metric: m_iou
+    aggregation: !function activitynet_tvg_utils.tvg_aggregate_m_iou
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    # One verbatim ET-Instruct SFT instruction; {query} is replaced with the doc's query text.
+    # The format clause must match TRAINING: avtr/data/imagine.py rewrites "From <t>a</t>s to
+    # <t>b</t>s" to "[a, b]" (avtr/data/targets.py:to_bracket_tg), so this is that rewritten
+    # instruction verbatim. A checkpoint trained on the raw <t> format needs the <t> clause back.
+    post_prompt: "Detect and report the start and end timestamps of the video segment that semantically matches the given textual query '{query}'. Answer in the format: [start_time, end_time]."

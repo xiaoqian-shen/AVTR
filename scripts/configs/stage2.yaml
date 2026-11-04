@@ -1,0 +1,82 @@
+# Stage 2: answer and imagination-trigger supervision, initialized from stage 1.
+# Train backbone, queries, markers, and connector with CE + diffusion; freeze SANA.
+seed: 42
+
+model:
+  backbone: ${BACKBONE:-Qwen/Qwen3.5-9B}
+  init_from: ${INIT_FROM}         # required: stage-1 checkpoint (queries, connector, SANA in diffusion/)
+  sana: ${SANA:-}
+  attn_implementation: flash_attention_2
+  num_queries: 64
+  connector_layers: 6
+  layer_agg: last
+  resolution: 512
+  edit_cond: true
+  edit_source_dropout: 0.1
+  markers: true                   # <imagine> ... </imagine> with trainable marker vectors
+  fp32_latent_query: true         # fp32 masters: at this lr a bf16 AdamW step rounds to zero
+  ce_loss_weight: 1.0
+  gen_loss_weight: 0.2
+
+trainable:
+  vision: 1.0e-6
+  language: 1.0e-6
+  latent_queries: 1.0e-6
+  markers: 1.0e-6
+  connector: 1.0e-6
+
+data:
+  kind: imagine
+  seed: 819
+  target_only: false              # target-less rows teach the trigger to withhold
+  think_opener: false             # the whole "<think>\n\n</think>\n\n" scaffold stays masked
+  target_min_std: 0
+  target_min_sharp: 0
+  joyai_train_sidecar: ${DATA_ROOT:-/data/avtr}/datasets/salient/joyai_full_v3/joyai_train_sidecar.json
+  joyai_neg_keep_prob: 0.3
+  joyai_neg_min_images: 2         # joyai_neg: only SAR's multi-image rows
+  joyai_answer_box_thickness: 5
+  joyai_mv_base_right_keep_prob: 1.0
+  region_sidecar: ${DATA_ROOT:-/data/avtr}/datasets/salient/full_v5/viscot_targets.json
+  clue_sidecar: ${DATA_ROOT:-/data/avtr}/datasets/clue_sidecars/causal_tg128.json
+  image_max_pixels: 4194304
+  image_min_pixels: 16384
+  video_max_pixels: 159744
+  video_min_pixels: 16384
+  video_fps: 2
+  video_max_frames: 256
+  sources:
+    - {name: joyai, adapter: joyai, dir: "${DATA_ROOT:-/data/avtr}/datasets/JoyAI-Image-OpenSpatial", subdirs: [MC, SR], weight: 279124}  # includes neg_keep_prob of the negative rows
+    - {name: joyai_neg, adapter: joyai, dir: "${DATA_ROOT:-/data/avtr}/datasets/JoyAI-Image-OpenSpatial", subdirs: [SAR], weight: 1800}
+    - {name: open_o3, adapter: open_o3, dir: "${DATA_ROOT:-/data/avtr}/datasets/Open-o3-Video-data-parquet", weight: 31166}
+    - {name: vsi590k, adapter: open_o3, dir: "${DATA_ROOT:-/data/avtr}/datasets/VSI-real4cat-vsi", weight: 11456}
+    - {name: spatial_ttt_97k, adapter: open_o3, dir: "${DATA_ROOT:-/data/avtr}/datasets/VSI-real4cat-sttt", weight: 8845}
+    - {name: activitynet, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/ActivityNet-Captions-parquet", weight: 49678}
+    - {name: g_videoqa, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/G-VideoQA-parquet", weight: 40547}
+    - {name: grounding_cot, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/Grounding-CoT-parquet", weight: 61621}
+    - {name: videochat3_lv, adapter: videokr, dir: "${DATA_ROOT:-/data/avtr}/datasets/VideoChat3-LV116k-parquet", weight: 80879}
+    - {name: visualcot, adapter: open_o3, dir: "${DATA_ROOT:-/data/avtr}/datasets/Visual-CoT-bbox-parquet", weight: 28167}  # the region-sidecar-verified rows
+    - {name: spatialedit, adapter: spatialedit, dir: "", subdirs: [camera_control, object_moving, object_rotation], weight: 100000}
+
+viz_every: 0
+output_mirror: ${OUTPUT_MIRROR:-}      # optional fsspec dir each checkpoint is copied to
+resume_from: ${RESUME_FROM:-}          # default: newest checkpoint-N in train.output_dir
+
+train:
+  output_dir: ${OUTPUT_DIR:-runs/stage2}
+  max_steps: 9346
+  per_device_train_batch_size: 1
+  lr_scheduler_type: cosine
+  warmup_steps: 0.03              # below one: a fraction of max_steps (warmup_ratio is deprecated)
+  weight_decay: 0.1
+  max_grad_norm: 5.0
+  optim: adamw_torch
+  bf16: true
+  tf32: true
+  fsdp: full_shard auto_wrap
+  gradient_checkpointing: true
+  logging_steps: 1
+  save_steps: 531
+  save_total_limit: 2
+  dataloader_num_workers: 8
+  report_to: tensorboard

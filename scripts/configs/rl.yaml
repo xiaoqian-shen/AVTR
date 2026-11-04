@@ -1,0 +1,143 @@
+# RL stage -- grounding and route gates in one run, on verl's PPO trainer (V1, sync), from a vocab-baked
+# stage-2 checkpoint (scripts/bake.sh --emit-markers), with the reference run's settings. See docs/TRAINING.md#adaptive-reasoning-with-rl.
+#
+# Each step trains train_batch_size prompts of the mixed parquet (avtr/rl/data.py: half are gate prompts),
+# each rolled out n times: avtr.sampling.grounding_groups grounding prompts and the rest gate prompts, drawn
+# from rounds of prompts whose rollouts disagree (avtr/rl/sampler.py). It makes ppo_epochs *
+# train_batch_size / ppo_mini_batch_size optimizer steps. Grounding rows always fire the block and skip
+# reasoning, and none of their route tokens is trained; gate rows cover the four routes and train both
+# gates. scripts/rl.sh requires CKPT and RL_DATA and sets OUTPUT_DIR and AVTR_REPO.
+#
+# Layout: trainer.nnodes trainer nodes and one vLLM node, full GPU nodes. The vLLM node generates the next step's batch
+# while the trainer updates (avtr.one_step_off, avtr/rl/one_step_off.py). On one node, on-policy:
+# avtr.one_step_off=false trainer.nnodes=1.
+hydra:
+  searchpath:
+    - pkg://verl.trainer.config
+
+defaults:
+  - ppo_trainer
+  - _self_
+
+avtr:
+  directive: true                 # prepend the imagine directive, as the eval does (add_directive)
+  grounding_max_tokens: 8064      # answer budget of a grounding row
+  gate_max_tokens: 8064           # chain + answer budget of a gate row (after <think>)
+  empty_think_redraws: 8          # redraws of a think-route rollout whose chain came out empty
+  force_close_tokens: 256         # answer budget of a chain closed when still open at gate_max_tokens
+  distill_beta: 0.10              # gate target q(z) = softmax(mean route reward / beta)
+  gate_loss_share: 0.001          # share of each PPO mini-batch's loss weight on the gate tokens
+  think_gate_skip: ties           # leave the think gate out where all routes are equally accurate (none / all_correct)
+  think_cost: 0.04                # route costs, charged to correct gate rollouts only
+  block_cost: 0.01
+  noblock_bonus: 0.01
+  unclosed_min_chars: 200
+  grounding_loss_weight: 5.0      # grounding advantage W * (IoU - group mean)
+  grounding_norm_by_std: false    # true divides it by the group's IoU std (GRPO)
+  is_cap: 3.0                     # truncation of the vLLM -> trainer importance weights (one per row)
+  shuffle_seed: 42                # the rows of step k are shuffled into mini-batches with seed + (k - 1) * 1000003
+  shuffle_ranks: 64               # and laid out as on the reference run's trainer GPUs, whatever the GPU count
+  one_step_off: true              # generate step k+1's batch during step k's update, with the weights from
+                                  # before step k, on the rollout pool; false: on-policy, vLLM on the trainer GPUs
+  sampling:                       # the groups of a step (avtr/rl/sampler.py)
+    round_prompts: 32             # prompts per generation round
+    max_rounds: 8                 # generation rounds per step, re-rolls included; a step still short raises
+    reroll_rounds: 2              # rounds per step that re-roll a short round's uniformly wrong groups
+    grounding_groups: 8           # grounding groups per step; the rest of train_batch_size are gate groups
+    seed: 42                      # the surplus draw of step k is seeded with seed + (k - 1) * 1000003
+
+data:
+  train_files: ${oc.env:RL_DATA}
+  val_files: ${oc.env:RL_DATA}    # not evaluated during training (test_freq off); verl needs a val set
+  val_max_samples: 8
+  train_batch_size: 16            # prompts per step
+  gen_batch_size: 1               # one prompt per dataloader fetch, so the sampler can draw any number
+  max_prompt_length: 24576        # the prompt budget in max_model_len; the agent loop does not truncate prompts
+  max_response_length: 8448       # route tokens, chain + answer, and a force-closed answer (avtr budgets)
+  image_patch_size: 16
+  return_raw_chat: true
+  shuffle: true
+  seed: 0
+  dataloader_num_workers: 8
+
+actor_rollout_ref:
+  model:
+    path: ${oc.env:CKPT}
+    use_remove_padding: true
+    enable_gradient_checkpointing: true
+    external_lib: [avtr.rl.runtime, avtr.rl.gate_logprob]   # imported by every worker (avtr/rl/train.py)
+  actor:
+    strategy: fsdp2
+    fsdp_config:
+      model_dtype: bf16           # bf16 weights and AdamW state, no fp32 master copy
+      mixed_precision: {param_dtype: bf16, reduce_dtype: fp32}
+    optim:
+      lr: 4.0e-6
+      lr_scheduler_type: cosine   # over trainer.total_training_steps, stepped once per step
+      lr_warmup_steps: 0
+      min_lr_ratio: 0.0
+      weight_decay: 0.0
+      betas: [0.9, 0.999]
+      override_optimizer_config: {eps: 1.0e-8}
+      clip_grad: 30.0
+    ppo_mini_batch_size: 4        # prompts; train_batch_size / ppo_mini_batch_size optimizer steps per step
+    ppo_micro_batch_size_per_gpu: 1
+    ppo_epochs: 1
+    shuffle: false                # mini-batches are the trainer's seeded shuffle of the step (avtr.shuffle_seed)
+    loss_agg_mode: token-mean     # the advantages carry token-mean loss weights (required)
+    clip_ratio_low: 0.2
+    clip_ratio_high: 0.2
+    clip_ratio_c: 5.0
+    use_kl_loss: false
+    entropy_coeff: 0
+    checkpoint:
+      save_contents: [model, optimizer, extra, hf_model]   # hf_model: global_step_N/actor/huggingface
+  rollout:
+    name: vllm
+    n: 16                         # rollouts per prompt; gate prompts need a multiple of the route count
+    nnodes: 1                     # the rollout pool of avtr.one_step_off, one vLLM engine per GPU
+    temperature: 1.0
+    top_p: 1.0
+    top_k: -1
+    tensor_model_parallel_size: 1
+    log_prob_micro_batch_size_per_gpu: 1
+    gpu_memory_utilization: 0.6   # vLLM on the trainer GPUs (on-policy runs)
+    standalone_gpu_memory_utilization: 0.85   # vLLM memory on the rollout pool
+    max_model_len: 33024          # max_prompt_length + max_response_length
+    max_num_batched_tokens: 16384
+    calculate_log_probs: true
+    checkpoint_engine:
+      backend: nccl               # sends the weights to the rollout pool after each step
+    engine_kwargs:
+      vllm:
+        limit_mm_per_prompt: {image: 16, video: 2}
+    agent:
+      default_agent_loop: imagine_route
+      agent_loop_config_path: ${oc.env:AVTR_REPO}/scripts/configs/rl_agent_loop.yaml
+
+algorithm:
+  adv_estimator: grpo             # unused: avtr/rl/trainer.py computes the advantages
+  use_kl_in_reward: false
+  rollout_correction:
+    rollout_is: null              # the importance weights come from avtr/rl/trainer.py
+
+trainer:
+  use_v1: true
+  v1:
+    trainer_mode: sync
+    sampler:                      # avtr/rl/sampler.py: rounds, group filter, grounding / gate split
+      custom_sampler:
+        path: pkg://avtr.rl.sampler
+        name: QuotaSampler
+      sampler_kwargs: ${avtr}     # read: avtr.sampling, the route costs and grounding_loss_weight
+  total_epochs: 6                 # also caps the run at total_epochs x (rows // train_batch_size) steps
+  total_training_steps: 400
+  nnodes: 8                       # the trainer pool
+  n_gpus_per_node: 8
+  save_freq: 10
+  test_freq: -1
+  val_before_train: false
+  logger: [console, tensorboard]
+  project_name: avtr
+  experiment_name: rl
+  default_local_dir: ${oc.env:OUTPUT_DIR}

@@ -1,0 +1,61 @@
+# Stage 0: image reconstruction with a frozen backbone.
+# Batch-size scaling and checkpoint formats: docs/TRAINING.md.
+seed: 0
+
+model:
+  backbone: ${BACKBONE:-Qwen/Qwen3.5-9B}
+  sana: ${SANA:-Efficient-Large-Model/Sana_1600M_512px_diffusers}
+  attn_implementation: flash_attention_2
+  num_queries: 64
+  connector_layers: 6
+  layer_agg: mean_last_half       # conditioning = mean of the last half of the decoder layers
+  resolution: 512
+  edit_cond: false
+  fp32_latent_query: true
+  gen_loss_weight: 1.0
+
+# Trainable groups and their learning rates (vision, language, latent_queries, markers, connector,
+# decoder); every other parameter is frozen.
+trainable:
+  latent_queries: 3.0e-5
+  connector: 3.0e-5
+  decoder: 3.0e-5
+decay_all_params: true            # torch AdamW default: weight decay on every parameter
+
+data:
+  kind: recon
+  seed: 0
+  roots:                          # WebDataset tar dirs, concatenated (sampling follows shard counts)
+    - ${DATA_ROOT:-/data/avtr}/datasets/BLIP3o-Pretrain-Short-Caption
+    - ${DATA_ROOT:-/data/avtr}/datasets/cc12m-wds
+    - ${DATA_ROOT:-/data/avtr}/datasets/InternVL-SA1B-Caption-WebDataset-1024px
+  shuffle_buffer: 2000
+  recon_prompt_prob: 0.2          # this fraction uses the fixed prompt instead of the caption
+  recon_prompt: Please reconstruct this image.
+  max_caption_tokens: 100
+  image_max_pixels: 4194304
+  image_min_pixels: 131072
+
+viz_every: 301
+viz_steps: 20
+output_mirror: ${OUTPUT_MIRROR:-}      # optional fsspec dir each checkpoint is copied to
+resume_from: ${RESUME_FROM:-}          # default: newest checkpoint-N in train.output_dir
+
+train:                            # transformers.TrainingArguments
+  output_dir: ${OUTPUT_DIR:-runs/stage0}
+  max_steps: ${MAX_STEPS:-26366}
+  per_device_train_batch_size: 16
+  lr_scheduler_type: cosine_with_min_lr
+  lr_scheduler_kwargs: {min_lr: 1.0e-5}
+  warmup_steps: 5000
+  weight_decay: 0.01
+  max_grad_norm: 5.0
+  optim: adamw_torch
+  bf16: true
+  fsdp: full_shard auto_wrap
+  gradient_checkpointing: true
+  logging_steps: 1
+  save_steps: 500
+  save_total_limit: 4
+  dataloader_num_workers: 8
+  report_to: tensorboard

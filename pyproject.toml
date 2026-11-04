@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avtr"
+version = "0.1.0"
+description = "Adaptive Multimodal Reasoning with Visual Imagination"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license-files = ["LICENSE"]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://xiaoqian-shen.github.io/AVTR/"
+Repository = "https://github.com/xiaoqian-shen/AVTR"
+Models = "https://huggingface.co/collections/shenxq/avtr"
+
+[project.scripts]
+avtr-infer = "avtr.inference:main"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["avtr*", "lmms_eval*"]
+
+[tool.setuptools.package-data]
+lmms_eval = ["tasks/**/*.yaml", "tasks/**/*_yaml"]

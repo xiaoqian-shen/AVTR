@@ -1,0 +1,47 @@
+# The official QVHighlights val split (Lei et al.). The annotations are the authors' release file,
+# pinned to a commit and a sha256; datasets reads its own fields (qid, query, vid, duration,
+# relevant_windows). The videos are streamed out of the authors' raw-video archive on first use, and
+# only the val videos are written, to $HF_HOME/qvhighlights/<vid>.mp4 (see utils.py for the overrides).
+dataset_path: https://github.com/jayleicn/moment_detr
+dataset_kwargs:
+  cache_dir: qvhighlights
+  video_subdir: ""
+  data_files:
+    test: https://raw.githubusercontent.com/jayleicn/moment_detr/2fa9e32eb6e0097ba8b4f841046aa3345d748cee/data/highlight_val_release.jsonl
+  data_files_sha256:
+    test: f668a1eaea156ec5315e14718999cea043a8cf948d3cafbd8e8d655318c3cd02
+task: qvhighlights
+test_split: test
+output_type: generate_until
+process_docs: !function utils.qvhighlights_process_docs
+doc_to_visual: !function utils.tvg_doc_to_visual
+doc_to_text: !function utils.tvg_doc_to_text
+doc_to_target: !function utils.tvg_doc_to_target
+process_results: !function utils.tvg_process_results
+generation_kwargs:
+  max_new_tokens: 256
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
+metric_list:
+  - metric: iou_0.3
+    aggregation: !function utils.tvg_aggregate_iou_03
+    higher_is_better: true
+  - metric: iou_0.5
+    aggregation: !function utils.tvg_aggregate_iou_05
+    higher_is_better: true
+  - metric: iou_0.7
+    aggregation: !function utils.tvg_aggregate_iou_07
+    higher_is_better: true
+  - metric: m_iou
+    aggregation: !function utils.tvg_aggregate_m_iou
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    # One verbatim ET-Instruct SFT instruction; {query} is replaced with the doc's query text.
+    # The format clause must match TRAINING: avtr/data/imagine.py rewrites "From <t>a</t>s to
+    # <t>b</t>s" to "[a, b]" (avtr/data/targets.py:to_bracket_tg), so this is that rewritten
+    # instruction verbatim. A checkpoint trained on the raw <t> format needs the <t> clause back.
+    post_prompt: "Detect and report the start and end timestamps of the video segment that semantically matches the given textual query '{query}'. Answer in the format: [start_time, end_time]."

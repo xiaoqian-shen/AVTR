@@ -1,0 +1,36 @@
+# MLVU M-Avg -- the multiple-choice dev split (task types: topic_reasoning,
+# anomaly_reco, needle, ego, count, order, plotQA). The generative subtasks (sub-scene captioning,
+# video summary) are NOT included: they need an LLM judge, and M-Avg is the number papers report.
+#
+# The shipped parquet lives in a `mlvu/` SUBDIR, unlike VSI-Bench/LongVideoBench whose parquet sits
+# at the dataset root, so data_files targets it explicitly. A bare data_files string loads as a
+# one-file `train` split -- hence test_split: train, same as hrbench.
+#
+# The video_part_*.zip archives hold FLAT .mp4 at the archive root (verified from the zip central
+# directory), so extraction puts them at $HF_HOME/mlvu/<video_name> with no subdirectory.
+dataset_path: sy1998/MLVU_dev
+dataset_kwargs:
+  cache_dir: mlvu
+  video: True
+  data_files: mlvu/test-00000-of-00001.parquet
+task: mlvu
+test_split: train
+output_type: generate_until
+doc_to_visual: !function utils.mlvu_mavg_doc_to_visual
+doc_to_text: !function utils.mlvu_mavg_doc_to_text
+doc_to_target: "answer"
+generation_kwargs:
+  max_new_tokens: 32
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
+process_results: !function utils.mlvu_mavg_process_results
+metric_list:
+  - metric: mlvu_m_avg
+    aggregation: !function utils.mlvu_mavg_aggregate_results
+    higher_is_better: true
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    post_prompt: "Answer with the option's letter from the given choices directly.\n"

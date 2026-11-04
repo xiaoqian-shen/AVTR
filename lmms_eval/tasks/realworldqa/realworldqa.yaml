@@ -1,0 +1,30 @@
+# A public mirror of RealWorldQA. xai-org/RealworldQA has the same images but some question texts
+# differ, so scores on the two copies are not directly comparable.
+dataset_path: nirajandhakal/realworldqa
+dataset_kwargs:
+  data_files:
+    test: data/test-*.parquet
+task: realworldqa
+test_split: test
+output_type: generate_until
+doc_to_visual: !function utils.realworldqa_doc_to_visual
+doc_to_text: !function utils.realworldqa_doc_to_text
+doc_to_target: !function utils.realworldqa_doc_to_target
+process_docs: !function utils.realworldqa_process_docs
+process_results: !function utils.realworldqa_process_results
+generation_kwargs:
+  max_new_tokens: 128
+  temperature: 0
+  top_p: 1.0
+  num_beams: 1
+  do_sample: false
+metric_list:
+  - metric: accuracy
+    aggregation: !function utils.realworldqa_aggregate_accuracy
+    higher_is_better: true
+# RealWorldQA bakes the answer-format instruction INTO the question
+# ("Please answer directly with ..."), so no extra post_prompt is needed.
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    post_prompt: ""
