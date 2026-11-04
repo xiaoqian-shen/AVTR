@@ -1,10 +1,14 @@
 <h1 align="center">AVTR: Adaptive Multimodal Reasoning with Visual Imagination</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Paper-Coming_Soon-lightgrey?logo=arxiv&amp;logoColor=white" alt="Paper (coming soon)">
-  <a href="https://huggingface.co/collections/shenxq/avtr"><img src="https://img.shields.io/badge/Hugging_Face-Models-FFD21E?logo=huggingface&amp;logoColor=black" alt="Hugging Face Models"></a>
-  <a href="https://xiaoqian-shen.github.io/AVTR/"><img src="https://img.shields.io/badge/Project-Page-0064E0?logo=googlechrome&amp;logoColor=white" alt="Project Page"></a>
+  <img src="https://img.shields.io/badge/Paper-Coming_Soon-lightgrey?logo=arxiv&amp;logoColor=B31B1B" alt="Paper (coming soon)">
+  <a href="https://huggingface.co/collections/shenxq/avtr"><img src="https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-Models-FFD21E" alt="Hugging Face Models"></a>
+  <a href="https://xiaoqian-shen.github.io/AVTR/"><img src="https://img.shields.io/badge/%F0%9F%8C%8D-Project_Page-0064E0" alt="Project Page"></a>
 </p>
+
+## 🔍 Overview
+
+![AVTR overview](assets/teaser.jpg)
 
 ## 🛠️ Installation
 
