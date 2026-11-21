@@ -446,3 +446,10 @@ table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 @media (max-width: 370px) {
   .vis-trace { flex-direction: column; gap: 6px; }   /* opening tag, image, closing tag stacked on narrow phones */
 }
+
+/* Resource buttons: black outline and black text; only the icon carries the link's color. */
+.links > a { --button-ink: #1d1d1f; --button-border: #1d1d1f; --button-fill: #f3f4f6; }
+.links > a.link-arxiv i { color: #b31b1b; }
+.links > a.link-code  i { color: #24292f; }
+.links > a.link-demo  i { color: #7c3aed; }
+.links > a.link-video i { color: #1f7a52; }
