@@ -4,6 +4,7 @@
   <a href="https://arxiv.org/pdf/2611.24161" target="_blank" rel="noopener"><img src="https://img.shields.io/badge/arXiv-Paper-B31B1B?logo=arxiv&amp;logoColor=white" alt="arXiv 2611.24161"></a>
   <a href="https://huggingface.co/collections/shenxq/avtr"><img src="https://img.shields.io/badge/%F0%9F%A4%97_Hugging_Face-Models-FFD21E" alt="Hugging Face Models"></a>
   <a href="https://xiaoqian-shen.github.io/AVTR/"><img src="https://img.shields.io/badge/%F0%9F%8C%8D_Project-Page-0064E0" alt="Project Page"></a>
+  <a href="https://huggingface.co/spaces/shenxq/AVTR"><img src="https://img.shields.io/badge/%F0%9F%9A%80_Online-Demo-7C3AED" alt="Online Demo"></a>
 </p>
 
 ## 🔍 Overview
